@@ -1,5 +1,10 @@
 const express = require("express");
 const router = express.Router();
+const {
+  Worker,
+  setEnvironmentData,
+  getEnvironmentData,
+} = require("worker_threads");
 
 const creationArray = (nbNodes) => {
   const nodeArray = [];
@@ -14,65 +19,36 @@ const creationArray = (nbNodes) => {
   return nodeArray;
 };
 
-const getRandomNodes = (nbNodes, uPosition, k) => {
-  const randomNodes = [];
-  for (var i = 0; i < k; ++i) {
-    let randomNode = null;
-    while (randomNode === null || randomNode === uPosition) {
-      randomNode = Math.floor(Math.random() * nbNodes);
-      if (randomNode !== uPosition) randomNodes.push(randomNode);
-    }
-  }
-  return randomNodes;
-};
-
-const query = (nodeOne, nodeTwo) => {
-  if (nodeTwo.color === 0) {
-    nodeTwo.color = nodeOne.color;
-  }
-  return nodeTwo.color;
-};
-
 const arrayDeepCopy = (array) => {
   return JSON.parse(JSON.stringify(array));
 };
 
-const main = (nbNodes, m, k, alpha) => {
-  let historyNodeArray = [];
-  const initNodeArray = creationArray(nbNodes);
-  historyNodeArray.push(initNodeArray);
+function _useWorker(filepath, nbNodes, m, k, alpha) {
+  return new Promise((resolve, reject) => {
+    let historyNodeArray = [];
+    let initNodeArray = creationArray(nbNodes);
+    historyNodeArray.push(initNodeArray);
+    setEnvironmentData("m", m);
+    setEnvironmentData("nbNodes", nbNodes);
+    setEnvironmentData("k", k);
+    setEnvironmentData("alpha", alpha);
+    let workerArray = [];
 
-  for (var i = 0; i < m - 1; i++) {
-    let currentNodeArray = arrayDeepCopy(historyNodeArray[i]);
     for (var p = 0; p < nbNodes; p++) {
-      if (currentNodeArray[p].color === 0) {
-        continue;
-      }
-      const randomNodes = getRandomNodes(nbNodes, p, k);
-      randomNodes.forEach((nodePosition) => {
-        returnColor = query(
-          currentNodeArray[p],
-          currentNodeArray[nodePosition]
+      workerArray[p] = new Worker(filepath);
+      workerArray[p].on("message", (messageFromWorker) => {
+        currentNodeArray = messageFromWorker[1];
+        messageFromWorker[0].forEach(
+          (nodePosition) =>
+            (initNodeArray[nodePosition] = currentNodeArray[nodePosition])
         );
-        currentNodeArray[nodePosition].color = returnColor;
-        if (returnColor === 1) {
-          currentNodeArray[p].blueCounter++;
-        } else {
-          currentNodeArray[p].redCounter++;
-        }
+        return resolve;
       });
-      if (currentNodeArray[p].redCounter > alpha * k)
-        currentNodeArray[p].color = 2;
-      if (currentNodeArray[p].blueCounter > alpha * k)
-        currentNodeArray[p].color = 1;
-      [currentNodeArray[p].redCounter, currentNodeArray[p].blueCounter] = [
-        0, 0,
-      ];
     }
-    historyNodeArray.push(currentNodeArray);
-  }
-  return historyNodeArray;
-};
+
+    setInterval(() => historyNodeArray.push(initNodeArray), 1000);
+  });
+}
 
 const getData = (nbNodes, m, k, alpha) => {
   returnArray = [];
